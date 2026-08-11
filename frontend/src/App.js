@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 
-// Uses REACT_APP_API_URL environment variable if set (e.g., on Render/Netlify),
-// or defaults to your live backend service on Render.
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://sap-o2c-backend.onrender.com';
 
 function App() {
   const [activeTab, setActiveTab] = useState('customer');
-  const [orders, setOrders] = useState([]);
+  const [orders, setOrders] = useState([]); // Ensures it starts as an array
   const [inventory, setInventory] = useState({});
 
   // Customer Form State
@@ -19,9 +17,11 @@ function App() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/orders`);
       const data = await res.json();
-      setOrders(data);
+      // Ensure we only set orders if data is actually an array
+      setOrders(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to fetch orders:', err);
+      setOrders([]); // Fallback to empty array on network error
     }
   };
 
@@ -29,9 +29,10 @@ function App() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/inventory`);
       const data = await res.json();
-      setInventory(data);
+      setInventory(data || {});
     } catch (err) {
       console.error('Failed to fetch inventory:', err);
+      setInventory({});
     }
   };
 
@@ -42,40 +43,59 @@ function App() {
 
   const handleCreateOrder = async (e) => {
     e.preventDefault();
-    await fetch(`${API_BASE_URL}/api/orders`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ customerName, productName, quantity }),
-    });
-    fetchOrders();
-    alert('Order submitted successfully!');
+    try {
+      await fetch(`${API_BASE_URL}/api/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerName, productName, quantity }),
+      });
+      fetchOrders();
+      alert('Order submitted successfully!');
+    } catch (err) {
+      console.error('Failed to create order:', err);
+    }
   };
 
   const handleSalesDecision = async (id, approved) => {
-    await fetch(`${API_BASE_URL}/api/orders/${id}/sales`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ approved }),
-    });
-    fetchOrders();
+    try {
+      await fetch(`${API_BASE_URL}/api/orders/${id}/sales`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approved }),
+      });
+      fetchOrders();
+    } catch (err) {
+      console.error('Failed to update sales decision:', err);
+    }
   };
 
   const handleWarehouseDispatch = async (id) => {
-    const res = await fetch(`${API_BASE_URL}/api/orders/${id}/warehouse`, {
-      method: 'PATCH',
-    });
-    const data = await res.json();
-    if (!data.success) alert(data.message);
-    fetchOrders();
-    fetchInventory();
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/orders/${id}/warehouse`, {
+        method: 'PATCH',
+      });
+      const data = await res.json();
+      if (!data.success) alert(data.message);
+      fetchOrders();
+      fetchInventory();
+    } catch (err) {
+      console.error('Failed warehouse dispatch:', err);
+    }
   };
 
   const handlePayment = async (id) => {
-    await fetch(`${API_BASE_URL}/api/orders/${id}/pay`, {
-      method: 'PATCH',
-    });
-    fetchOrders();
+    try {
+      await fetch(`${API_BASE_URL}/api/orders/${id}/pay`, {
+        method: 'PATCH',
+      });
+      fetchOrders();
+    } catch (err) {
+      console.error('Failed to process payment:', err);
+    }
   };
+
+  // Safe checks for filtering arrays safely
+  const safeOrders = Array.isArray(orders) ? orders : [];
 
   return (
     <div className="app-container">
@@ -137,15 +157,15 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {orders.map((o) => (
+                {safeOrders.map((o) => (
                   <tr key={o.id}>
                     <td>{o.id}</td>
                     <td>{o.customerName}</td>
                     <td>{o.productName} ({o.quantity})</td>
-                    <td>{o.aiEvaluation.score}</td>
+                    <td>{o.aiEvaluation?.score}</td>
                     <td>
-                      <span className={`badge badge-${o.aiEvaluation.risk.toLowerCase()}`}>
-                        {o.aiEvaluation.risk} Risk ({o.aiEvaluation.recommendation})
+                      <span className={`badge badge-${(o.aiEvaluation?.risk || 'low').toLowerCase()}`}>
+                        {o.aiEvaluation?.risk} Risk ({o.aiEvaluation?.recommendation})
                       </span>
                     </td>
                     <td><span className="status-pill">{o.status}</span></td>
@@ -188,7 +208,7 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {orders.filter(o => o.status === 'Sales Approved' || o.status.includes('Stock')).map((o) => (
+                  {safeOrders.filter(o => o.status === 'Sales Approved' || o.status?.includes('Stock')).map((o) => (
                     <tr key={o.id}>
                       <td>{o.id}</td>
                       <td>{o.productName}</td>
@@ -220,7 +240,7 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {orders.filter(o => o.status === 'Invoiced' || o.paid).map((o) => (
+                {safeOrders.filter(o => o.status === 'Invoiced' || o.paid).map((o) => (
                   <tr key={o.id}>
                     <td>{o.id}</td>
                     <td>{o.customerName}</td>

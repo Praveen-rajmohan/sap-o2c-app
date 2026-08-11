@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://sap-o2c-backend.onrender.com';
+// Smart URL switcher: Uses local backend when testing on localhost, uses Render URL in production
+const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:5000'
+  : (process.env.REACT_APP_API_URL || 'https://sap-o2c-backend.onrender.com');
 
 function App() {
   const [activeTab, setActiveTab] = useState('customer');
   const [orders, setOrders] = useState([]);
   const [inventory, setInventory] = useState({});
 
-  // Customer Form State
+  // Form State
   const [customerName, setCustomerName] = useState('Acme Corp');
   const [productName, setProductName] = useState('SAP S/4HANA License');
   const [quantity, setQuantity] = useState(1);
@@ -43,18 +46,29 @@ function App() {
   const handleCreateOrder = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${API_BASE_URL}/api/orders`, {
+      const response = await fetch(`${API_BASE_URL}/api/orders`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customerName, productName, quantity }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ 
+          customerName, 
+          productName, 
+          quantity: parseInt(quantity) || 1 
+        }),
       });
-      if (res.ok) {
-        fetchOrders();
-        alert('Order submitted successfully! Switch to Sales tab to review.');
-        setActiveTab('sales'); // Auto-switch to sales tab to see the order immediately
+
+      if (response.ok) {
+        await fetchOrders();
+        alert('Order submitted successfully!');
+        setActiveTab('sales');
+      } else {
+        alert('Failed to submit order. Please check backend status.');
       }
     } catch (err) {
-      console.error('Failed to create order:', err);
+      console.error('Error submitting order:', err);
+      alert('Network error while submitting order.');
     }
   };
 
@@ -80,7 +94,7 @@ function App() {
       if (!data.success) {
         alert(data.message || 'Insufficient Stock');
       } else {
-        alert('Stock verified and order moved to Invoiced/Finance!');
+        alert('Stock verified and moved to Finance!');
       }
       fetchOrders();
       fetchInventory();

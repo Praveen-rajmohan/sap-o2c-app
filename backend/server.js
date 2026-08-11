@@ -1,10 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-
 const app = express();
-app.use(cors());
+
+app.use(cors({ origin: '*' }));
 app.use(bodyParser.json());
+app.use(express.json());
 
 // Mock In-Memory Database
 let inventory = {
@@ -34,7 +35,6 @@ function runAICredentialCheck(customerName) {
   }
 }
 
-// Routes
 // 1. Submit Order
 app.post('/api/orders', (req, res) => {
   const { customerName, productName, quantity } = req.body;
@@ -44,15 +44,15 @@ app.post('/api/orders', (req, res) => {
     id: 'SO-' + Math.floor(100000 + Math.random() * 900000),
     customerName,
     productName,
-    quantity: parseInt(quantity),
+    quantity: parseInt(quantity) || 1,
     aiEvaluation: aiResult,
-    status: 'Pending Sales Approval', // Pending Sales Approval -> Sales Approved -> Warehouse Confirmed -> Invoiced -> Paid
-    invoiceAmount: parseInt(quantity) * 500, // Mock price $500 per unit
+    status: 'Pending Sales Approval',
+    invoiceAmount: (parseInt(quantity) || 1) * 500,
     paid: false,
     createdAt: new Date().toISOString()
   };
 
-  orders.push(newOrder);
+  orders.unshift(newOrder); // Adds new order to the top of the array
   res.status(201).json({ message: 'Order Created', order: newOrder });
 });
 
@@ -106,5 +106,5 @@ app.get('/api/inventory', (req, res) => {
   res.json(inventory);
 });
 
-const PORT = 5000;
-app.listen(PORT, () => console.log(`SAP O2C Backend running on http://localhost:${PORT}`));
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`SAP O2C Backend running on port ${PORT}`));

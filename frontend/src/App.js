@@ -5,7 +5,7 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://sap-o2c-backend.o
 
 function App() {
   const [activeTab, setActiveTab] = useState('customer');
-  const [orders, setOrders] = useState([]); // Ensures it starts as an array
+  const [orders, setOrders] = useState([]);
   const [inventory, setInventory] = useState({});
 
   // Customer Form State
@@ -17,11 +17,10 @@ function App() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/orders`);
       const data = await res.json();
-      // Ensure we only set orders if data is actually an array
       setOrders(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to fetch orders:', err);
-      setOrders([]); // Fallback to empty array on network error
+      setOrders([]);
     }
   };
 
@@ -44,13 +43,16 @@ function App() {
   const handleCreateOrder = async (e) => {
     e.preventDefault();
     try {
-      await fetch(`${API_BASE_URL}/api/orders`, {
+      const res = await fetch(`${API_BASE_URL}/api/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ customerName, productName, quantity }),
       });
-      fetchOrders();
-      alert('Order submitted successfully!');
+      if (res.ok) {
+        fetchOrders();
+        alert('Order submitted successfully! Switch to Sales tab to review.');
+        setActiveTab('sales'); // Auto-switch to sales tab to see the order immediately
+      }
     } catch (err) {
       console.error('Failed to create order:', err);
     }
@@ -75,7 +77,11 @@ function App() {
         method: 'PATCH',
       });
       const data = await res.json();
-      if (!data.success) alert(data.message);
+      if (!data.success) {
+        alert(data.message || 'Insufficient Stock');
+      } else {
+        alert('Stock verified and order moved to Invoiced/Finance!');
+      }
       fetchOrders();
       fetchInventory();
     } catch (err) {
@@ -89,12 +95,12 @@ function App() {
         method: 'PATCH',
       });
       fetchOrders();
+      alert('Payment processed successfully!');
     } catch (err) {
       console.error('Failed to process payment:', err);
     }
   };
 
-  // Safe checks for filtering arrays safely
   const safeOrders = Array.isArray(orders) ? orders : [];
 
   return (
@@ -157,28 +163,32 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {safeOrders.map((o) => (
-                  <tr key={o.id}>
-                    <td>{o.id}</td>
-                    <td>{o.customerName}</td>
-                    <td>{o.productName} ({o.quantity})</td>
-                    <td>{o.aiEvaluation?.score}</td>
-                    <td>
-                      <span className={`badge badge-${(o.aiEvaluation?.risk || 'low').toLowerCase()}`}>
-                        {o.aiEvaluation?.risk} Risk ({o.aiEvaluation?.recommendation})
-                      </span>
-                    </td>
-                    <td><span className="status-pill">{o.status}</span></td>
-                    <td>
-                      {o.status === 'Pending Sales Approval' && (
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button className="btn btn-approve" onClick={() => handleSalesDecision(o.id, true)}>Approve</button>
-                          <button className="btn btn-reject" onClick={() => handleSalesDecision(o.id, false)}>Disapprove</button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {safeOrders.length === 0 ? (
+                  <tr><td colSpan="7" style={{ textAlign: 'center', color: '#94a3b8' }}>No orders found. Please place an order in Tab 1.</td></tr>
+                ) : (
+                  safeOrders.map((o) => (
+                    <tr key={o.id}>
+                      <td>{o.id}</td>
+                      <td>{o.customerName}</td>
+                      <td>{o.productName} ({o.quantity})</td>
+                      <td>{o.aiEvaluation?.score}</td>
+                      <td>
+                        <span className={`badge badge-${(o.aiEvaluation?.risk || 'low').toLowerCase()}`}>
+                          {o.aiEvaluation?.risk} Risk ({o.aiEvaluation?.recommendation})
+                        </span>
+                      </td>
+                      <td><span className="status-pill">{o.status}</span></td>
+                      <td>
+                        {o.status === 'Pending Sales Approval' && (
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button className="btn btn-approve" onClick={() => handleSalesDecision(o.id, true)}>Approve</button>
+                            <button className="btn btn-reject" onClick={() => handleSalesDecision(o.id, false)}>Disapprove</button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -208,17 +218,21 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {safeOrders.filter(o => o.status === 'Sales Approved' || o.status?.includes('Stock')).map((o) => (
-                    <tr key={o.id}>
-                      <td>{o.id}</td>
-                      <td>{o.productName}</td>
-                      <td>{o.quantity}</td>
-                      <td><span className="status-pill">{o.status}</span></td>
-                      <td>
-                        <button className="btn btn-action" onClick={() => handleWarehouseDispatch(o.id)}>Verify Stock & Dispatch</button>
-                      </td>
-                    </tr>
-                  ))}
+                  {safeOrders.filter(o => o.status === 'Sales Approved' || o.status?.includes('Stock')).length === 0 ? (
+                    <tr><td colSpan="5" style={{ textAlign: 'center', color: '#94a3b8' }}>No approved orders waiting for dispatch.</td></tr>
+                  ) : (
+                    safeOrders.filter(o => o.status === 'Sales Approved' || o.status?.includes('Stock')).map((o) => (
+                      <tr key={o.id}>
+                        <td>{o.id}</td>
+                        <td>{o.productName}</td>
+                        <td>{o.quantity}</td>
+                        <td><span className="status-pill">{o.status}</span></td>
+                        <td>
+                          <button className="btn btn-action" onClick={() => handleWarehouseDispatch(o.id)}>Verify Stock & Dispatch</button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -240,23 +254,27 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {safeOrders.filter(o => o.status === 'Invoiced' || o.paid).map((o) => (
-                  <tr key={o.id}>
-                    <td>{o.id}</td>
-                    <td>{o.customerName}</td>
-                    <td>${o.invoiceAmount}</td>
-                    <td>
-                      <span className={`badge ${o.paid ? 'badge-low' : 'badge-high'}`}>
-                        {o.paid ? 'PAID' : 'UNPAID'}
-                      </span>
-                    </td>
-                    <td>
-                      {!o.paid && (
-                        <button className="btn btn-approve" onClick={() => handlePayment(o.id)}>Process Payment</button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {safeOrders.filter(o => o.status === 'Invoiced' || o.paid || o.status?.includes('Completed')).length === 0 ? (
+                  <tr><td colSpan="5" style={{ textAlign: 'center', color: '#94a3b8' }}>No invoiced orders found yet.</td></tr>
+                ) : (
+                  safeOrders.filter(o => o.status === 'Invoiced' || o.paid || o.status?.includes('Completed')).map((o) => (
+                    <tr key={o.id}>
+                      <td>{o.id}</td>
+                      <td>{o.customerName}</td>
+                      <td>${o.invoiceAmount}</td>
+                      <td>
+                        <span className={`badge ${o.paid ? 'badge-low' : 'badge-high'}`}>
+                          {o.paid ? 'PAID' : 'UNPAID'}
+                        </span>
+                      </td>
+                      <td>
+                        {!o.paid && (
+                          <button className="btn btn-approve" onClick={() => handlePayment(o.id)}>Process Payment</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
